@@ -97,6 +97,10 @@ CLEAN_BUILD()
 	echo "Removing old zip/tar.md5 files..."
 	rm -f $OUT_DIR/$OUT_NAME.zip
 	rm -f $OUT_DIR/$OUT_NAME.tar.md5
+
+	echo "Removing old scripts/mkqcdtbootimg/mkqcdtbootimg..."
+	make -C $RDIR/scripts/mkqcdtbootimg clean
+	rm -rf $RDIR/scripts/mkqcdtbootimg/mkqcdtbootimg
 }
 
 BUILD_KERNEL_CONFIG()
@@ -132,6 +136,11 @@ BUILD_RAMDISK()
 BUILD_BOOT_IMG()
 {
 	echo "Generating boot.img..."
+
+	if ! [ -f $RDIR/scripts/mkqcdtbootimg/mkqcdtbootimg ] ; then
+		make -C $RDIR/scripts/mkqcdtbootimg
+	fi
+
 	$RDIR/scripts/mkqcdtbootimg/mkqcdtbootimg --kernel $KDIR/zImage \
 		--ramdisk $KDIR/ramdisk.cpio.gz \
 		--dt_dir $KDIR \

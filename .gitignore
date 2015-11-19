@@ -1,0 +1,6 @@
+dl.zip/boot.img
+build/
+delidded-kernel-*.zip
+*.o
+scripts/mkqcdtbootimg/mkqcdtbootimg
+dl-build-menu.inc

@@ -1,3 +1,27 @@
-ui_print("Writing delidded boot.img to memory...");
+ui_print("Installing delidded kernel by frequentc...");
+ui_print("");
+
+ui_print("Mounting /system");
+ifelse(is_mounted("/system"), unmount("/system"));
+mount("ext4", "EMMC", "/dev/block/platform/msm_sdcc.1/by-name/system", "/system");
+ui_print("");
+
+ui_print("Renaming /system/app/NfcNci/NfcNci.apk to NfcNci.apk.bak...");
+ui_print("This will disable NFC, which is necessary because NFC is broken in CM-12.1 on the N900T.");
+ui_print("It was causing crashes and bad battery life.");
+run_program("/sbin/mv","/system/app/NfcNci/NfcNci.apk", "/system/app/NfcNci/NfcNci.apk.bak");
+ui_print("");
+
+ui_print("Creating addon.d script: /system/addon.d/91-delidded.sh...");
+ui_print("This will make the NFC fix stay even if you update CyanogenMod.");
+package_extract_file("system/addon.d/91-delidded.sh", "/system/addon.d/91-delidded.sh");
+set_perm(0, 0, 0755, "/system/addon.d/91-delidded.sh");
+ui_print("");
+
+unmount("/system");
+
+ui_print("Writing boot.img to memory...");
 package_extract_file("boot.img", "/dev/block/platform/msm_sdcc.1/by-name/boot");
+ui_print("");
+
 ui_print("Done.");

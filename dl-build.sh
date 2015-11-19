@@ -1,9 +1,13 @@
 #!/bin/bash
-# delidded kernel for Samsung Galaxy Note 3 build script.
-# This build script is for AOSP/CyanogenMod only
+# kernel build script for Samsung Galaxy Note 3.
+# This script is for AOSP/CyanogenMod only.
 #
-# Originally written by jcadduono
-# Updated by frequentc
+# Originally written by jcadduono @ xda
+#
+# Updated by frequentc @ xda
+# - Modified to support command line arguments
+# - Made script more generic and customizable
+# - Other minor changes
 
 ################### BEFORE STARTING ################
 #
@@ -14,15 +18,11 @@
 #
 # once you've set up the config section how you like it, you can simply run
 # ./dl-build.sh
-# while inside the /delidded-kernel-note3/ directory.
 #
 ###################### CONFIG ######################
 
-# root directory of delidded's git repo (default is this script's location)
+# root directory of kernel's git repo (default is this script's location)
 RDIR=$(pwd)
-
-# a short name for the kernel (will be used to locate ramdisk and zip folders)
-KERNEL_SHORTNAME=dl
 
 [ -z $VARIANT ] && \
 # device variant/carrier, possible options:
@@ -41,7 +41,10 @@ VARIANT=tmo
 # version number
 VER=0.1
 
-# kernel version string appended to 3.4.x-delidded-kernel-hlte-
+# KERNEL_NAME should NOT contain any spaces
+KERNEL_NAME=delidded-kernel
+
+# kernel version string appended to 3.4.x-${KERNEL_NAME}-kernel-hlte-
 # (shown in Settings -> About device)
 KERNEL_VERSION=$VARIANT-$VER-cm12.1
 
@@ -53,7 +56,7 @@ PERMISSIVE=1
 OUT_DIR=$RDIR
 
 # output filename of flashable kernel
-OUT_NAME=delidded-kernel-hlte-$KERNEL_VERSION
+OUT_NAME=${KERNEL_NAME}-hlte-$KERNEL_VERSION
 
 # should we make a TWRP flashable zip? (1 = yes, 0 = no)
 MAKE_ZIP=1
@@ -62,24 +65,33 @@ MAKE_ZIP=1
 MAKE_TAR=0
 
 # directory containing cross-compile arm-cortex_a15 toolchain
-TOOLCHAIN=~/arm-cortex_a15-linux-gnueabihf-linaro_4.9.4-2015.06
+TOOLCHAIN=~/y/toolchains/arm-cortex_a15-linux-gnueabihf-linaro_4.9.4-2015.06
 
 # amount of cpu threads to use in kernel make process
 THREADS=3
 
 ############## SCARY NO-TOUCHY STUFF ###############
 
+# Used as the prefix for the ramdisk and zip folders. Also used to prefix the defconfig files in arch/arm/configs/.
+FILE_PREFIX=dl
+KERNEL_AUTHOR=frequentc
+
+RAMDISK_FOLDER=${FILE_PREFIX}.ramdisk
+ZIP_FOLDER=${FILE_PREFIX}.zip
+DEFCONFIG=${FILE_PREFIX}_defconfig
+VARIANT_DEFCONFIG=${FILE_PREFIX}_${VARIANT}_defconfig
+
 export ARCH=arm
 export CROSS_COMPILE=$TOOLCHAIN/bin/arm-eabi-
 export LOCALVERSION=$KERNEL_VERSION
 
-if ! [ -f $RDIR"/arch/arm/configs/dl_"$VARIANT"_defconfig" ] ; then
+if ! [ -f $RDIR"/arch/arm/configs/${VARIANT_DEFCONFIG}" ] ; then
 	echo "Device variant/carrier $VARIANT not found in arm configs!"
 	exit -1
 fi
 
-if ! [ -d $RDIR/${KERNEL_SHORTNAME}.ramdisk/variant/$VARIANT/ ] ; then
-	echo "Device variant/carrier $VARIANT not found in ${KERNEL_SHORTNAME}.ramdisk/variant!"
+if ! [ -d $RDIR/${RAMDISK_FOLDER}/variant/$VARIANT/ ] ; then
+	echo "Device variant/carrier $VARIANT not found in ${RAMDISK_FOLDER}/variant!"
 	exit -1
 fi
 
@@ -93,7 +105,7 @@ CLEAN_BUILD()
 	cd $RDIR
 	rm -rf build
 	echo "Removing old boot.img..."
-	rm -f ${KERNEL_SHORTNAME}.zip/boot.img
+	rm -f ${ZIP_FOLDER}/boot.img
 	echo "Removing old zip/tar.md5 files..."
 	rm -f $OUT_DIR/$OUT_NAME.zip
 	rm -f $OUT_DIR/$OUT_NAME.tar.md5
@@ -108,8 +120,8 @@ BUILD_KERNEL_CONFIG()
 	echo "Creating kernel config..."
 	cd $RDIR
 	mkdir -p build
-	make -C $RDIR O=build dl_defconfig \
-		VARIANT_DEFCONFIG=dl_${VARIANT}_defconfig
+	make -C $RDIR O=build ${DEFCONFIG} \
+		VARIANT_DEFCONFIG=${VARIANT_DEFCONFIG}
 }
 
 BUILD_KERNEL()
@@ -124,8 +136,8 @@ BUILD_RAMDISK()
 	cd $RDIR
 	rm -rf build/ramdisk 2>/dev/null
 	mkdir -p build/ramdisk
-	cp -ar ${KERNEL_SHORTNAME}.ramdisk/common/* build/ramdisk
-	cp -ar ${KERNEL_SHORTNAME}.ramdisk/variant/$VARIANT/* build/ramdisk
+	cp -ar ${RAMDISK_FOLDER}/common/* build/ramdisk
+	cp -ar ${RAMDISK_FOLDER}/variant/$VARIANT/* build/ramdisk
 	echo "Building ramdisk.img..."
 	cd $RDIR/build/ramdisk
 	mkdir -pm 755 dev proc sys system
@@ -150,20 +162,7 @@ BUILD_BOOT_IMG()
 		--pagesize 2048 \
 		--ramdisk_offset 0x02900000 \
 		--tags_offset 0x02700000 \
-		--output $RDIR/${KERNEL_SHORTNAME}.zip/boot.img
-
-#	$RDIR/tools/dtbTool -o $KDIR/boot.img-dtb --page-size 2048 --dtc-path $RDIR/scripts/dtc/ $KDIR/
-#        mkbootimg --kernel $KDIR/zImage \
-#                --ramdisk $KDIR/ramdisk.cpio.gz \
-#                --dt $KDIR/boot.img-dtb \
-#                --cmdline "quiet console=null androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x3F androidboot.bootdevice=msm_sdcc.1 androidboot.selinux=$SELINUX" \
-#                --base 0x00000000 \
-#		--kernel_offset 00008000 \
-#                --pagesize 2048 \
-#                --ramdisk_offset 0x02900000 \
-#                --tags_offset 0x02700000 \
-#                --output $RDIR/${KERNEL_SHORTNAME}.zip/boot.img 
-
+		--output $RDIR/${ZIP_FOLDER}/boot.img
 }
 
 CREATE_ZIP()
@@ -171,7 +170,7 @@ CREATE_ZIP()
 	if [ $MAKE_ZIP != 1 ]; then return; fi
 
 	echo "Compressing to TWRP flashable zip file..."
-	cd $RDIR/${KERNEL_SHORTNAME}.zip
+	cd $RDIR/${ZIP_FOLDER}
 	zip -r -9 - * > $OUT_DIR/$OUT_NAME.zip
 	cd $RDIR
 }
@@ -181,7 +180,7 @@ CREATE_TAR()
 	if [ $MAKE_TAR != 1 ]; then return; fi
 	
 	echo "Compressing to Odin flashable tar.md5 file..."
-	cd $RDIR/${KERNEL_SHORTNAME}.zip
+	cd $RDIR/${ZIP_FOLDER}
 	tar -H ustar -c boot.img > $OUT_DIR/$OUT_NAME.tar
 	cd $OUT_DIR
 	md5sum -t $OUT_NAME.tar >> $OUT_NAME.tar
@@ -194,16 +193,20 @@ function SHOW_HELP()
 	SCRIPT_NAME=`basename "$0"`
 
 	cat << EOF
+${KERNEL_NAME} by ${KERNEL_AUTHOR}. To configure this script for your build, edit the top of dl-build.sh before continuing.
+
 usage: ./$SCRIPT_NAME [OPTION]
 
 Common options:
   -a|--all		Do a complete build (starting at the beginning)
   -c|--clean		Remove everything this build script has done
-  -k|--kernel		Try the build again starting at the kernel
+  -k|--kernel		Try the build again starting at compiling the kernel
   -r|--ramdisk		Try the build again starting at the ramdisk
  
-Other options that only complete 1 section of the build:
+Other options that only complete 1 part of the build:
  -ko|--kernel-only	Recompile only the kernel
+
+Build script by jcadduono & frequentc
 EOF
 
 	exit -1
@@ -269,7 +272,7 @@ while [[ $# > 0 ]]
 	    	;;
 	    
 	     -r|--ramdisk)
-	    	if ! BUILD_FROM_RAMDISK; then
+	     	if ! BUILD_RAMDISK_CONTINUE; then
 			echo "Failed!"
 			exit -1
 		else

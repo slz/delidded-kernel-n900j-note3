@@ -100,7 +100,7 @@ CLEAN_BUILD()
 
 	echo "Removing old scripts/mkqcdtbootimg/mkqcdtbootimg..."
 	make -C $RDIR/scripts/mkqcdtbootimg clean
-	rm -rf $RDIR/scripts/mkqcdtbootimg/mkqcdtbootimg
+	rm -rf $RDIR/scripts/mkqcdtbootimg/mkqcdtbootimg 2>/dev/null
 }
 
 BUILD_KERNEL_CONFIG()
@@ -122,6 +122,7 @@ BUILD_RAMDISK()
 {
 	echo "Building ramdisk structure..."
 	cd $RDIR
+	rm -rf build/ramdisk 2>/dev/null
 	mkdir -p build/ramdisk
 	cp -ar ${KERNEL_SHORTNAME}.ramdisk/common/* build/ramdisk
 	cp -ar ${KERNEL_SHORTNAME}.ramdisk/variant/$VARIANT/* build/ramdisk
@@ -167,6 +168,8 @@ BUILD_BOOT_IMG()
 
 CREATE_ZIP()
 {
+	if [ $MAKE_ZIP != 1 ]; then return; fi
+
 	echo "Compressing to TWRP flashable zip file..."
 	cd $RDIR/${KERNEL_SHORTNAME}.zip
 	zip -r -9 - * > $OUT_DIR/$OUT_NAME.zip
@@ -175,6 +178,8 @@ CREATE_ZIP()
 
 CREATE_TAR()
 {
+	if [ $MAKE_TAR != 1 ]; then return; fi
+	
 	echo "Compressing to Odin flashable tar.md5 file..."
 	cd $RDIR/${KERNEL_SHORTNAME}.zip
 	tar -H ustar -c boot.img > $OUT_DIR/$OUT_NAME.tar
@@ -183,3 +188,100 @@ CREATE_TAR()
 	mv $OUT_NAME.tar $OUT_NAME.tar.md5
 	cd $RDIR
 }
+
+function SHOW_HELP()
+{
+	SCRIPT_NAME=`basename "$0"`
+
+	cat << EOF
+usage: ./$SCRIPT_NAME [OPTION]
+
+Common options:
+  -a|--all		Do a complete build (starting at the beginning)
+  -c|--clean		Remove everything this build script has done
+  -k|--kernel		Try the build again starting at the kernel
+  -r|--ramdisk		Try the build again starting at the ramdisk
+ 
+Other options that only complete 1 section of the build:
+ -ko|--kernel-only	Recompile only the kernel
+EOF
+
+	exit -1
+}
+
+function BUILD_RAMDISK_CONTINUE()
+{
+	BUILD_RAMDISK && BUILD_BOOT_IMG && CREATE_ZIP && CREATE_TAR
+}
+
+function BUILD_KERNEL_CONTINUE()
+{
+	BUILD_KERNEL && BUILD_RAMDISK_CONTINUE
+}
+
+function BUILD_ALL()
+{
+	CLEAN_BUILD && BUILD_KERNEL_CONFIG && BUILD_KERNEL_CONTINUE
+}
+
+if [ $# = 0 ] ; then
+	SHOW_HELP
+fi
+
+while [[ $# > 0 ]]
+	do
+	key="$1"
+
+	case $key in
+	     -a|--all)
+		if ! BUILD_ALL; then
+			echo "Failed!"
+			exit -1
+		else
+			echo "Finished!"
+		fi
+		break
+	    	;;
+	    
+	     -c|--clean)
+	    	CLEAN_BUILD
+	    	break
+	    	;;
+	    
+	     -k|--kernel)
+	    	if ! BUILD_KERNEL_CONTINUE; then
+			echo "Failed!"
+			exit -1
+		else
+			echo "Finished!"
+		fi
+	    	break
+	    	;;
+	    
+	    -ko|--kernel-only)
+	    	if ! BUILD_KERNEL; then
+			echo "Failed!"
+			exit -1
+		else
+			echo "Finished!"
+		fi
+	    	break
+	    	;;
+	    
+	     -r|--ramdisk)
+	    	if ! BUILD_FROM_RAMDISK; then
+			echo "Failed!"
+			exit -1
+		else
+			echo "Finished!"
+		fi
+	    	break
+	    	;;
+	    
+	    *)
+	    	SHOW_HELP
+	    	break;
+	    	;;
+	esac
+	shift # past argument or value
+done
